@@ -1,0 +1,43 @@
+from pathlib import Path
+import numpy as np
+import random
+
+# ---------- Locate project root ----------
+project_root = Path.cwd()
+if project_root.name == "notebooks":
+    project_root = project_root.parent
+
+gt_dir = project_root / "train" / "train" / "GT"
+lr_dir = project_root / "train" / "train" / "NoisyLR"
+
+# ---------- Sample 200 image pairs ----------
+files = sorted([f.name for f in gt_dir.glob("*.npy")])
+random.seed(42)
+sample_files = random.sample(files, 200)
+
+gt_mins, gt_maxs = [], []
+lr_mins, lr_maxs = [], []
+mean_diffs = []
+shape_pairs = []
+
+for fname in sample_files:
+    gt = np.load(gt_dir / fname)
+    lr = np.load(lr_dir / fname)
+
+    gt_mins.append(float(gt.min()))
+    gt_maxs.append(float(gt.max()))
+    lr_mins.append(float(lr.min()))
+    lr_maxs.append(float(lr.max()))
+    mean_diffs.append(abs(float(gt.mean()) - float(lr.mean())))
+    shape_pairs.append((gt.shape, lr.shape))
+
+print("GT min range:", min(gt_mins), "to", max(gt_mins))
+print("GT max range:", min(gt_maxs), "to", max(gt_maxs))
+print()
+print("LR min range:", min(lr_mins), "to", max(lr_mins))
+print("LR max range:", min(lr_maxs), "to", max(lr_maxs))
+print()
+print("Average |mean(GT)-mean(LR)|:", np.mean(mean_diffs))
+print("Maximum |mean(GT)-mean(LR)|:", np.max(mean_diffs))
+print()
+print("Unique shape pairs:", set(shape_pairs))
