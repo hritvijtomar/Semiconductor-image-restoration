@@ -2,80 +2,125 @@ import sys
 from pathlib import Path
 
 # Add model and utility folders to Python path
-BASE_DIR = Path(__file__).resolve().parent
-sys.path.insert(0, str(BASE_DIR / "models"))
-sys.path.insert(0, str(BASE_DIR / "utils"))
+sys.path.append(str(Path(__file__).parent / "models"))
+sys.path.append(str(Path(__file__).parent / "utils"))
 
 import torch
-import torch.nn as nn
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader, random_split
 
-from edsr import EDSR
+from rcan import RCAN
 from dataset import SuperResolutionDataset
+from metrics import calculate_psnr
+from losses import CharbonnierLoss
 
+# =========================
+# Configuration
+# =========================
 
-# -----------------------
-# Dataset
-# -----------------------
-dataset = SuperResolutionDataset(
-    lr_dir=r"C:\Users\abhis\Desktop\KLA\train\train\NoisyLR",
-    hr_dir=r"C:\Users\abhis\Desktop\KLA\train\train\GT"
-)
+PROJECT_ROOT = Path(__file__).parent.parent
 
-# Use only 200 samples for fast debugging
-dataset = Subset(dataset, range(200))
+LR_DIR = r"C:\Users\abhis\Desktop\KLA\train\train\NoisyLR"
+HR_DIR = r"C:\Users\abhis\Desktop\KLA\train\train\GT"
 
-loader = DataLoader(
-    dataset,
-    batch_size=16,
-    shuffle=True
-)
+BATCH_SIZE = 8
+EPOCHS = 10
+LEARNING_RATE = 1e-4
+TRAIN_SPLIT = 0.9
 
-
-# -----------------------
+# =========================
 # Device
-# -----------------------
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Device: {device}")
+# =========================
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+print(f"Device: {device}")
 if device.type == "cuda":
     print(f"GPU: {torch.cuda.get_device_name(0)}")
 
+# =========================
+# Dataset
+# =========================
 
-# -----------------------
+full_dataset = SuperResolutionDataset(
+    lr_dir=LR_DIR,
+    hr_dir=HR_DIR
+)
+
+train_size = int(TRAIN_SPLIT * len(full_dataset))
+val_size = len(full_dataset) - train_size
+
+train_dataset, val_dataset = random_split(
+    full_dataset,
+    [train_size, val_size],
+    generator=torch.Generator().manual_seed(42)
+)
+
+train_loader = DataLoader(
+    train_dataset,
+    batch_size=BATCH_SIZE,
+    shuffle=True,
+    num_workers=0,
+    pin_memory=device.type == "cuda"
+)
+
+val_loader = DataLoader(
+    val_dataset,
+    batch_size=BATCH_SIZE,
+    shuffle=False,
+    num_workers=0,
+    pin_memory=device.type == "cuda"
+)
+
+print(f"Train images: {len(train_dataset)}")
+print(f"Validation images: {len(val_dataset)}")
+
+# =========================
 # Model
-# -----------------------
-model = EDSR(
-    channels=32,
-    num_blocks=4
+# =========================
+
+model = RCAN(
+    channels=64,
+    num_groups=5,
+    num_blocks=5,
+    reduction=16
 ).to(device)
 
-
-# -----------------------
+# =========================
 # Loss and optimizer
-# -----------------------
-criterion = nn.L1Loss()
+# =========================
+
+criterion = CharbonnierLoss()
 
 optimizer = torch.optim.Adam(
     model.parameters(),
-    lr=1e-4
+    lr=LEARNING_RATE
 )
 
+scheduler = torch.optim.lr_scheduler.StepLR(
+    optimizer,
+    step_size=20,
+    gamma=0.5
+)
 
-# -----------------------
+best_psnr = 0.0
+
+# =========================
 # Training loop
-# -----------------------
-epochs = 1
+# =========================
 
-for epoch in range(epochs):
+for epoch in range(EPOCHS):
+
+    # ---------------------
+    # Training
+    # ---------------------
 
     model.train()
-    epoch_loss = 0.0
+    train_loss = 0.0
 
-    for batch_idx, (lr, hr) in enumerate(loader):
+    for lr, hr in train_loader:
 
-        lr = lr.to(device)
-        hr = hr.to(device)
+        lr = lr.to(device, non_blocking=True)
+        hr = hr.to(device, non_blocking=True)
 
         optimizer.zero_grad()
 
@@ -87,24 +132,78 @@ for epoch in range(epochs):
 
         optimizer.step()
 
-        epoch_loss += loss.item()
+        train_loss += loss.item()
 
-        print(
-            f"Batch {batch_idx + 1}/{len(loader)} | "
-            f"Loss: {loss.item():.6f}"
+    train_loss /= len(train_loader)
+
+    # ---------------------
+    # Validation
+    # ---------------------
+
+    model.eval()
+
+    val_loss = 0.0
+    val_psnr = 0.0
+
+    with torch.no_grad():
+
+        for lr, hr in val_loader:
+
+            lr = lr.to(device, non_blocking=True)
+            hr = hr.to(device, non_blocking=True)
+
+            pred = model(lr)
+
+            loss = criterion(pred, hr)
+
+            val_loss += loss.item()
+
+            val_psnr += calculate_psnr(pred, hr)
+
+    val_loss /= len(val_loader)
+    val_psnr /= len(val_loader)
+
+    # ---------------------
+    # Learning rate update
+    # ---------------------
+
+    scheduler.step()
+
+    # ---------------------
+    # Checkpointing
+    # ---------------------
+
+    if val_psnr > best_psnr:
+
+        best_psnr = val_psnr
+
+        torch.save(
+            model.state_dict(),
+            PROJECT_ROOT / "best_rcan_v1.pth"
         )
 
-    avg_loss = epoch_loss / len(loader)
+        best_flag = " (best model saved)"
+    else:
+        best_flag = ""
 
-    print(
-        f"Epoch {epoch + 1}/{epochs} | "
-        f"Average Loss: {avg_loss:.6f}"
+    torch.save(
+        model.state_dict(),
+        PROJECT_ROOT / "last_rcan_v1.pth"
     )
 
+    # ---------------------
+    # Logging
+    # ---------------------
 
-# -----------------------
-# Save model
-# -----------------------
-torch.save(model.state_dict(), "edsr_v1_debug.pth")
+    current_lr = scheduler.get_last_lr()[0]
 
-print("Model saved as edsr_v1_debug.pth")
+    print(
+        f"Epoch {epoch + 1:02d}/{EPOCHS} | "
+        f"Train Loss: {train_loss:.6f} | "
+        f"Val Loss: {val_loss:.6f} | "
+        f"Val PSNR: {val_psnr:.2f} dB | "
+        f"LR: {current_lr:.6f}"
+        f"{best_flag}"
+    )
+
+print(f"Training complete. Best validation PSNR: {best_psnr:.2f} dB")

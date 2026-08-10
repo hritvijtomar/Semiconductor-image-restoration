@@ -1,0 +1,8 @@
+Phase 3 Benchmark Results
+=========================
+
+EDSR PSNR: 27.55 dB
+EDSR inference: 20.93 ms/image
+
+RCAN PSNR: 27.66 dB
+RCAN inference: 37.68 ms/image
