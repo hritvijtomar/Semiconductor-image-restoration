@@ -1,8 +1,19 @@
-Phase 3 Benchmark Results
-=========================
+Phase 5 Benchmark Results
+========================
 
-EDSR PSNR: 27.55 dB
-EDSR inference: 20.93 ms/image
+Device: cuda
+GPU: NVIDIA GeForce RTX 3050 Laptop GPU
+Batch size: 1
+Validation images: 320
 
-RCAN PSNR: 27.66 dB
-RCAN inference: 37.68 ms/image
+EDSR
+PSNR: 27.55 dB
+SSIM: 0.7330
+LPIPS: 0.3253
+Inference: 16.16 ms/image
+
+RCAN v2
+PSNR: 27.86 dB
+SSIM: 0.7498
+LPIPS: 0.3137
+Inference: 39.50 ms/image
