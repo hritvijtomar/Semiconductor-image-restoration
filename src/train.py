@@ -1,4 +1,5 @@
 import sys
+import time
 from pathlib import Path
 
 # Add model and utility folders to Python path
@@ -6,7 +7,7 @@ sys.path.append(str(Path(__file__).parent / "models"))
 sys.path.append(str(Path(__file__).parent / "utils"))
 
 import torch
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, Subset
 
 from rcan import RCAN
 from dataset import SuperResolutionDataset
@@ -23,9 +24,10 @@ LR_DIR = r"C:\Users\abhis\Desktop\KLA\train\train\NoisyLR"
 HR_DIR = r"C:\Users\abhis\Desktop\KLA\train\train\GT"
 
 BATCH_SIZE = 8
-EPOCHS = 10
+EPOCHS = 30
 LEARNING_RATE = 1e-4
 TRAIN_SPLIT = 0.9
+RANDOM_SEED = 42
 
 # =========================
 # Device
@@ -41,18 +43,39 @@ if device.type == "cuda":
 # Dataset
 # =========================
 
-full_dataset = SuperResolutionDataset(
+base_dataset = SuperResolutionDataset(
     lr_dir=LR_DIR,
-    hr_dir=HR_DIR
+    hr_dir=HR_DIR,
+    augment=False
 )
 
-train_size = int(TRAIN_SPLIT * len(full_dataset))
-val_size = len(full_dataset) - train_size
+total_size = len(base_dataset)
+train_size = int(TRAIN_SPLIT * total_size)
 
-train_dataset, val_dataset = random_split(
-    full_dataset,
-    [train_size, val_size],
-    generator=torch.Generator().manual_seed(42)
+generator = torch.Generator().manual_seed(RANDOM_SEED)
+indices = torch.randperm(total_size, generator=generator).tolist()
+
+train_indices = indices[:train_size]
+val_indices = indices[train_size:]
+
+train_dataset = Subset(
+    SuperResolutionDataset(
+        lr_dir=LR_DIR,
+        hr_dir=HR_DIR,
+        augment=True,
+        crop_size=64
+    ),
+    train_indices
+)
+
+val_dataset = Subset(
+    SuperResolutionDataset(
+        lr_dir=LR_DIR,
+        hr_dir=HR_DIR,
+        augment=False,
+        crop_size=None
+    ),
+    val_indices
 )
 
 train_loader = DataLoader(
@@ -96,23 +119,26 @@ optimizer = torch.optim.Adam(
     lr=LEARNING_RATE
 )
 
-scheduler = torch.optim.lr_scheduler.StepLR(
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
     optimizer,
-    step_size=20,
-    gamma=0.5
+    T_max=EPOCHS,
+    eta_min=1e-6
 )
 
 best_psnr = 0.0
+history = {
+    "train_loss": [],
+    "val_loss": [],
+    "val_psnr": []
+}
+
+start_time = time.time()
 
 # =========================
 # Training loop
 # =========================
 
 for epoch in range(EPOCHS):
-
-    # ---------------------
-    # Training
-    # ---------------------
 
     model.train()
     train_loss = 0.0
@@ -135,10 +161,6 @@ for epoch in range(EPOCHS):
         train_loss += loss.item()
 
     train_loss /= len(train_loader)
-
-    # ---------------------
-    # Validation
-    # ---------------------
 
     model.eval()
 
@@ -163,15 +185,11 @@ for epoch in range(EPOCHS):
     val_loss /= len(val_loader)
     val_psnr /= len(val_loader)
 
-    # ---------------------
-    # Learning rate update
-    # ---------------------
+    history["train_loss"].append(train_loss)
+    history["val_loss"].append(val_loss)
+    history["val_psnr"].append(val_psnr)
 
     scheduler.step()
-
-    # ---------------------
-    # Checkpointing
-    # ---------------------
 
     if val_psnr > best_psnr:
 
@@ -179,7 +197,7 @@ for epoch in range(EPOCHS):
 
         torch.save(
             model.state_dict(),
-            PROJECT_ROOT / "best_rcan_v1.pth"
+            PROJECT_ROOT / "best_rcan_v2.pth"
         )
 
         best_flag = " (best model saved)"
@@ -188,12 +206,8 @@ for epoch in range(EPOCHS):
 
     torch.save(
         model.state_dict(),
-        PROJECT_ROOT / "last_rcan_v1.pth"
+        PROJECT_ROOT / "last_rcan_v2.pth"
     )
-
-    # ---------------------
-    # Logging
-    # ---------------------
 
     current_lr = scheduler.get_last_lr()[0]
 
@@ -206,4 +220,12 @@ for epoch in range(EPOCHS):
         f"{best_flag}"
     )
 
+training_time = time.time() - start_time
+
+torch.save(
+    history,
+    PROJECT_ROOT / "training_history_v2.pth"
+)
+
 print(f"Training complete. Best validation PSNR: {best_psnr:.2f} dB")
+print(f"Total training time: {training_time / 60:.2f} minutes")
