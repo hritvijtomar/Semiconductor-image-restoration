@@ -52,3 +52,11 @@ Thumbs.db
 *.log
 *.tmp
 *.temp
+
+
+.venv/
+__pycache__/
+*.pyc
+results/
+reports/
+notebooks/.ipynb_checkpoints/

@@ -5,3 +5,7 @@ matplotlib
 scikit-image
 lpips
 tqdm
+
+# --- Frontend (Streamlit dashboard) ---
+streamlit>=1.32
+pillow

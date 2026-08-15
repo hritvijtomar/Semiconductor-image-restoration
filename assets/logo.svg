@@ -1,0 +1,11 @@
+<svg width="220" height="48" viewBox="0 0 220 48" xmlns="http://www.w3.org/2000/svg">
+  <rect x="2" y="2" width="44" height="44" rx="10" fill="#0f1626" stroke="#1e293b"/>
+  <rect x="12" y="12" width="24" height="24" rx="4" fill="#111a2c" stroke="#3b82f6" stroke-width="1.5"/>
+  <circle cx="24" cy="24" r="4" fill="#34d399"/>
+  <line x1="24" y1="12" x2="24" y2="6" stroke="#3b82f6" stroke-width="1.5"/>
+  <line x1="24" y1="36" x2="24" y2="42" stroke="#3b82f6" stroke-width="1.5"/>
+  <line x1="12" y1="24" x2="6" y2="24" stroke="#3b82f6" stroke-width="1.5"/>
+  <line x1="36" y1="24" x2="42" y2="24" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="58" y="22" font-family="Inter, Segoe UI, sans-serif" font-size="15" font-weight="800" fill="#e5e7eb">Semiconductor</text>
+  <text x="58" y="38" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#3b82f6">Image Restoration</text>
+</svg>
