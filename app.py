@@ -298,15 +298,28 @@ with right_col:
         if result_mode == INFERENCE_MODE:
             zoom = st.slider("🔍 Zoom", min_value=1.0, max_value=4.0, value=1.0, step=0.5)
 
+            # FIX: RCAN output can fall slightly outside [0, 1] (e.g. from the
+            # Charbonnier-trained head overshooting on noisy inputs). Streamlit's
+            # st.image() raises "Data is outside [0.0, 1.0] and clamp is not set"
+            # for such arrays, so clip once here and reuse everywhere below.
+            restored_display = np.clip(result["restored"], 0.0, 1.0)
+
             c1, c2 = st.columns(2)
             with c1:
                 st.markdown(f"**Input (Noisy LR)**")
                 st.image(_zoomed(result["input"], zoom), use_container_width=True)
             with c2:
                 st.markdown(f"**RCAN Restored**")
-                st.image(_zoomed(result["restored"], zoom), use_container_width=True)
+                st.image(_zoomed(restored_display, zoom), use_container_width=True)
 
         else:  # DEMO_MODE
+            # FIX: same clipping applied here so Side-by-side / Overlay / Swipe
+            # all render from the same, valid-range restored array. Metrics
+            # below are computed separately (in _do_restore) from the raw,
+            # unclipped model output, so this clip is display-only and does
+            # not affect PSNR / SSIM / LPIPS.
+            restored_display = np.clip(result["restored"], 0.0, 1.0)
+
             view = st.radio(
                 "Comparison view",
                 options=["Side-by-side", "Overlay", "Swipe"],
@@ -325,21 +338,21 @@ with right_col:
                     st.image(result["ground_truth"], use_container_width=True)
                 with c3:
                     st.markdown("**Restored**")
-                    st.image(np.clip(result["restored"], 0.0, 1.0), use_container_width=True)
+                    st.image(restored_display, use_container_width=True)
 
             elif view == "Overlay":
                 alpha = st.slider(
                     "Blend: Ground Truth ↔ Restored", min_value=0.0, max_value=1.0,
                     value=0.5, step=0.05,
                 )
-                blended = image_utils.blend_images(result["ground_truth"], result["restored"], alpha)
-                st.image(blended, use_container_width=True, caption="Ground Truth ↔ Restored overlay")
+                blended = image_utils.blend_images(result["ground_truth"], restored_display, alpha)
+                st.image(np.clip(blended, 0.0, 1.0), use_container_width=True, caption="Ground Truth ↔ Restored overlay")
 
             else:  # Swipe
                 import streamlit.components.v1 as components
 
                 html = image_utils.build_swipe_widget_html(
-                    result["ground_truth"], result["restored"],
+                    result["ground_truth"], restored_display,
                     left_label="Ground Truth", right_label="Restored",
                 )
                 components.html(html, height=420)
@@ -396,7 +409,9 @@ with right_col:
         if result_mode == DEMO_MODE:
             with feat_cols[1]:
                 with st.expander("🌡️ Absolute error heatmap"):
-                    diff = image_utils.compute_difference_map(result["restored"], result["ground_truth"])
+                    # FIX: use the clipped restored array here too so the heatmap
+                    # image never receives out-of-range values.
+                    diff = image_utils.compute_difference_map(restored_display, result["ground_truth"])
                     heatmap = image_utils.difference_map_to_heatmap(diff)
                     st.image(heatmap, use_container_width=True, caption="|Restored − Ground Truth|")
 
@@ -414,7 +429,9 @@ with right_col:
         with dl_cols[1]:
             st.download_button(
                 "⬇️  Download restored .png",
-                data=image_utils.array_to_png_bytes(result["restored"]),
+                # FIX: PNG export uses the clipped display array so the
+                # downloaded image visually matches what's shown in the app.
+                data=image_utils.array_to_png_bytes(restored_display),
                 file_name="restored.png",
                 mime="image/png",
                 use_container_width=True,
