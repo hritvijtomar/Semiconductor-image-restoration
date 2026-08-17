@@ -41,6 +41,7 @@ The final model uses **Residual Channel Attention Network (RCAN)** with:
 * 64 feature channels
 * channel attention mechanism
 * long and short residual connections
+* 2× spatial upscaling using PixelShuffle
 
 RCAN selectively emphasizes informative feature channels and preserves fine image structures more effectively than the baseline model.
 
@@ -61,14 +62,14 @@ A **90/10 train-validation split** is used with a fixed random seed to ensure re
 
 ## Training configuration
 
-| Parameter     |             Value |
-| ------------- | ----------------: |
-| Epochs        |                30 |
-| Batch size    |                 8 |
-| Optimizer     |              Adam |
-| Learning rate |              1e-4 |
+| Parameter     | Value |
+|---------------|------:|
+| Epochs        | 30 |
+| Batch size    | 8 |
+| Optimizer     | Adam |
+| Learning rate | 1e-4 |
 | Scheduler     | CosineAnnealingLR |
-| Loss          |       Charbonnier |
+| Loss          | Charbonnier |
 
 ## Evaluation metrics
 
@@ -82,9 +83,9 @@ We evaluate restoration quality using:
 
 Validation set: **320 images**
 
-| Model       | PSNR (dB) |       SSIM |      LPIPS |    Inference |
-| ----------- | --------: | ---------: | ---------: | -----------: |
-| EDSR        |     27.55 |     0.7330 |     0.3253 |     16.16 ms |
+| Model | PSNR (dB) | SSIM | LPIPS | Inference |
+|-------|----------:|-----:|------:|-----------:|
+| EDSR | 27.55 | 0.7330 | 0.3253 | 16.16 ms |
 | **RCAN v2** | **27.86** | **0.7498** | **0.3137** | **39.50 ms** |
 
 RCAN improves reconstruction quality across all evaluation metrics.
@@ -93,6 +94,9 @@ RCAN improves reconstruction quality across all evaluation metrics.
 
 ```text
 Semiconductor-image-restoration/
+├── run.py
+├── models/
+│   └── best_rcan_v2.pth
 ├── src/
 │   ├── train.py
 │   ├── inference.py
@@ -102,89 +106,11 @@ Semiconductor-image-restoration/
 │   ├── visualize_inference.py
 │   ├── models/
 │   └── utils/
+├── frontend/
+├── assets/
+├── demo_samples/
 ├── reports/
 ├── results/
 ├── notebooks/
 ├── README.md
 └── requirements.txt
-```
-
-## Installation
-
-```bash
-python -m venv .venv
-.venv\\Scripts\\activate
-pip install -r requirements.txt
-```
-
-## Training
-
-Update the dataset paths in `src/train.py` and run:
-
-```bash
-python src/train.py
-```
-
-The script automatically:
-
-* trains RCAN
-* evaluates on the validation set
-* saves the best checkpoint
-* records training history
-
-## Benchmarking
-
-Run:
-
-```bash
-python src/benchmark.py
-```
-
-This reports:
-
-* PSNR
-* SSIM
-* LPIPS
-* inference time
-* GPU information
-
-## Inference
-
-Restore images from an input directory:
-
-```bash
-python src/inference.py --input test_input --output test_output
-```
-
-The script loads the trained RCAN checkpoint and restores all supported images automatically.
-
-## Training curves
-
-Training and validation curves are generated using:
-
-```bash
-python src/plot_training.py
-```
-
-Outputs are stored in `results/training/`.
-
-## Failure-case analysis
-
-The repository includes examples where RCAN:
-
-* successfully removes heavy noise
-* preserves edge structures
-* struggles with extremely low-information or highly textured regions
-
-A detailed discussion is provided in `reports/failure_analysis.md`.
-
-## Current status
-
-* EDSR baseline implemented
-* RCAN implemented
-* augmentation pipeline completed
-* optimized training completed
-* PSNR/SSIM/LPIPS evaluation completed
-* inference pipeline completed
-* benchmarking completed
-* failure analysis completed
